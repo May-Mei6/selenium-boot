@@ -9,7 +9,7 @@ sidebar_label: Read table rows
 
 Read an HTML table as data instead of walking its cells by hand. Call `rows()` on a
 locator that points at the `<table>`, and you get back one map per row, keyed by
-column header. 
+column header.
 
 {/* Part 1 (May): snippets: read rows, find a row by column value, assert on a cell */}
 
@@ -26,7 +26,7 @@ Example table with three columns (Last Name, First Name, and Due) and two rows:
 </table>
 ```
 
-```java 
+```java
 List<Map<String, String>> rows = $("#table1").rows();
 // [{Last Name=Smith, First Name=John, Due=$50.00},
 //  {Last Name=Doe,   First Name=Jason, Due=$100.00}]
@@ -40,6 +40,16 @@ Map<String, String> doe = rows.stream()
         .findFirst()
         .orElseThrow();
 // {Last Name=Doe, First Name=Jason, Due=$100.00}
+```
+
+Then assert on a cell by its column header:
+
+```java
+import org.testng.Assert;
+
+// Check Jason Doe's due amount
+Assert.assertEquals(doe.get("Due"), "$100.00");
+// fails with: expected [$100.00] but found [$90.00] if the cell says $90.00
 ```
 
 {/* Part 2 (Lisr-iiil): short rows and <th>-only group rows */}
