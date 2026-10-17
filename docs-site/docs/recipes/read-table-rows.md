@@ -53,3 +53,27 @@ Assert.assertEquals(doe.get("Due"), "$100.00");
 ```
 
 {/* Part 2 (Lisr-iiil): short rows and <th>-only group rows */}
+
+## Short rows
+
+When a data row has fewer `<td>` cells than there are headers, `rows()` still
+includes every header key. Missing trailing cells have the value `""`, not `null`.
+For example, replace the table's `<tbody>` with:
+
+```html
+<tbody>
+  <tr><td>Smith</td><td>John</td></tr>
+  <tr><td>Doe</td><td>Jason</td><td>$100.00</td></tr>
+</tbody>
+```
+
+```java
+List<Map<String, String>> rows = $("#table1").rows();
+Map<String, String> smith = rows.get(0);
+Assert.assertTrue(smith.containsKey("Due"));
+Assert.assertEquals(smith.get("Due"), "");
+```
+
+Cells are matched to headers by position. Omitting a middle `<td>` shifts the
+remaining values to earlier columns; use an empty `<td></td>` to preserve that
+column's position. Cells beyond the number of headers are ignored.
