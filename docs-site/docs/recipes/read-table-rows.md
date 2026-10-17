@@ -32,4 +32,14 @@ List<Map<String, String>> rows = $("#table1").rows();
 //  {Last Name=Doe,   First Name=Jason, Due=$100.00}]
 ```
 
+`rows()` returns a plain `List`, so finding a row by a column's value is ordinary Java:
+
+```java
+Map<String, String> doe = rows.stream()
+        .filter(row -> row.get("Last Name").equals("Doe"))
+        .findFirst()
+        .orElseThrow();
+// {Last Name=Doe, First Name=Jason, Due=$100.00}
+```
+
 {/* Part 2 (Lisr-iiil): short rows and <th>-only group rows */}
