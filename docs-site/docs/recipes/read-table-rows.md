@@ -11,8 +11,6 @@ Read an HTML table as data instead of walking its cells by hand. Call `rows()` o
 locator that points at the `<table>`, and you get back one map per row, keyed by
 column header.
 
-{/* Part 1 (May): snippets: read rows, find a row by column value, assert on a cell */}
-
 Example table with three columns (Last Name, First Name, and Due) and two rows:
 ```html
 <table id="table1">
@@ -51,8 +49,6 @@ import org.testng.Assert;
 Assert.assertEquals(doe.get("Due"), "$100.00");
 // fails with: expected [$100.00] but found [$90.00] if the cell says $90.00
 ```
-
-{/* Part 2 (Lisr-iiil): short rows and <th>-only group rows */}
 
 The examples below use variations of the same `#table1` table. Keep its `<thead>`
 and three column headers unchanged, and replace only the `<tbody>` as shown in
