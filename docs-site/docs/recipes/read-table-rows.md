@@ -1,5 +1,5 @@
 ---
-description: "TODO (Lisr-iiil): SEO description, under 160 characters"
+description: "Read HTML table rows with Selenium Boot Locator.rows(), find rows by column value, assert cells, and handle short rows and group headings."
 id: read-table-rows
 title: Read table rows
 sidebar_label: Read table rows
@@ -10,6 +10,8 @@ sidebar_label: Read table rows
 Read an HTML table as data instead of walking its cells by hand. Call `rows()` on a
 locator that points at the `<table>`, and you get back one map per row, keyed by
 column header.
+
+## Read, find, and assert on rows
 
 Example table with three columns (Last Name, First Name, and Due) and two rows:
 ```html
@@ -82,6 +84,7 @@ Map<String, String> smith = rows.get(0);
 // {Last Name=Smith, First Name=John, Due=}
 Assert.assertTrue(smith.containsKey("Due"));
 Assert.assertEquals(smith.get("Due"), "");
+// Both assertions pass: the Due key is retained and its missing cell is mapped to "".
 ```
 
 Cells are matched to headers by position. Omitting a middle `<td>` shifts the
@@ -118,6 +121,7 @@ List<Map<String, String>> rows = $("#table1").rows();
 Assert.assertEquals(rows.size(), 2);
 Assert.assertEquals(rows.get(0).get("Last Name"), "Smith");
 Assert.assertEquals(rows.get(1).get("Last Name"), "Doe");
+// All three assertions pass: the group heading is skipped, leaving Smith and Doe in order.
 ```
 
 Keep the column headers in `<thead>` as shown above. Without a `<thead>` header,
