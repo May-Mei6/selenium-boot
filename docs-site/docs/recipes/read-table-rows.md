@@ -52,19 +52,13 @@ Assert.assertEquals(doe.get("Due"), "$100.00");
 // fails with: expected [$100.00] but found [$90.00] if the cell says $90.00
 ```
 
-The examples below use variations of the same `#table1` table. Keep its `<thead>`
-and three column headers unchanged, and replace only the `<tbody>` as shown in
-each section. Read the rows again after loading each variation; each Java block
-is a separate example rather than additional statements in the same method.
+For each example below, reuse `#table1` and its `<thead>`, replacing only the `<tbody>`.
 
 ## Short rows
 
-When a data row has fewer `<td>` cells than there are headers, `rows()` still
-includes every header key. Missing trailing cells have the value `""`, not `null`.
-
-In the HTML below, Smith's final `<td>` has been removed from the original example,
-while Doe's row is unchanged. Replace only the original table's `<tbody>` with
-this fragment; keep `<table id="table1">` and its `<thead>`:
+When a row has fewer `<td>` cells than there are headers, `rows()` retains every
+header key and fills missing trailing values with `""`. Here, Smith's final
+cell is missing, while Doe's row is complete:
 
 ```html
 <tbody>
@@ -73,33 +67,24 @@ this fragment; keep `<table id="table1">` and its `<thead>`:
 </tbody>
 ```
 
-After loading the modified table, use the same `$("#table1").rows()` call as in
-the core example. Select Smith's row and assert both that the `Due` key exists
-and that its value is an empty string. This distinguishes a missing cell value
-from a missing map key:
-
 ```java
 List<Map<String, String>> rows = $("#table1").rows();
 Map<String, String> smith = rows.get(0);
-// {Last Name=Smith, First Name=John, Due=}
 Assert.assertTrue(smith.containsKey("Due"));
 Assert.assertEquals(smith.get("Due"), "");
-// Both assertions pass: the Due key is retained and its missing cell is mapped to "".
+// Smith retains the Due key with an empty-string value.
+Assert.assertEquals(rows.get(1).get("Due"), "$100.00");
+// Doe's complete row keeps its original value.
 ```
 
-Cells are matched to headers by position. Omitting a middle `<td>` shifts the
-remaining values to earlier columns; use an empty `<td></td>` to preserve that
-column's position. Cells beyond the number of headers are ignored.
+Note that cells are matched by position. Omitting a middle `<td>` shifts later
+values to earlier columns; use an empty `<td></td>` to preserve the position.
+Cells beyond the header count are ignored.
 
 ## Group rows containing only `<th>`
 
-After the table header has been selected, rows with no `<td>` cells are skipped.
-A `<th>`-only group heading does not become a data row or change the header keys:
-
-Starting with the short-row variation above, add a group heading before Smith's
-row. Its single `<th>` spans all three columns, and it has no `<td>` cells.
-Keep the original `<table id="table1">` and `<thead>` again, replacing only
-the `<tbody>` with:
+Once the column headers are selected, rows containing no `<td>` cells are
+skipped. The group heading below spans three columns but is not a data row:
 
 ```html
 <tbody>
@@ -109,21 +94,14 @@ the `<tbody>` with:
 </tbody>
 ```
 
-Load this table variation and read it with the same `rows()` call. Assert that
-the result contains only the two data rows, in order, and that their names are
-still available under the original `Last Name` header. The group heading must
-not appear as an extra data row:
-
 ```java
 List<Map<String, String>> rows = $("#table1").rows();
-// [{Last Name=Smith, First Name=John, Due=},
-//  {Last Name=Doe, First Name=Jason, Due=$100.00}]
 Assert.assertEquals(rows.size(), 2);
 Assert.assertEquals(rows.get(0).get("Last Name"), "Smith");
 Assert.assertEquals(rows.get(1).get("Last Name"), "Doe");
-// All three assertions pass: the group heading is skipped, leaving Smith and Doe in order.
+// The group heading is skipped; Smith and Doe remain in order.
 ```
 
-Keep the column headers in `<thead>` as shown above. Without a `<thead>` header,
-the first row containing `<th>` cells supplies the keys, so a group heading
-before the column headers would be interpreted as the header instead.
+Note that header selection matters: without a `<thead>` header, the first row
+containing `<th>` supplies the keys. Keep the column headers in `<thead>` so a
+preceding group heading is not selected as the header.
