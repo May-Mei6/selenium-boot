@@ -13,7 +13,8 @@ column header.
 
 ## Read, find, and assert on rows
 
-Example table with three columns (Last Name, First Name, and Due) and two rows:
+Given a table like this:
+
 ```html
 <table id="table1">
   <thead>
@@ -26,31 +27,41 @@ Example table with three columns (Last Name, First Name, and Due) and two rows:
 </table>
 ```
 
-```java
-List<Map<String, String>> rows = $("#table1").rows();
-// [{Last Name=Smith, First Name=John, Due=$50.00},
-//  {Last Name=Doe,   First Name=Jason, Due=$100.00}]
-```
+read it, find a row by a column's value, and assert on a cell:
 
-`rows()` returns a plain `List`, so finding a row by a column's value is ordinary Java:
-
-```java
-Map<String, String> doe = rows.stream()
-        .filter(row -> row.get("Last Name").equals("Doe"))
-        .findFirst()
-        .orElseThrow();
-// {Last Name=Doe, First Name=Jason, Due=$100.00}
-```
-
-Then assert on a cell by its column header:
-
-```java
+```java title="AccountsTableTest.java"
+import com.seleniumboot.test.BaseTest;
+import java.util.List;
+import java.util.Map;
 import org.testng.Assert;
-
-// Check Jason Doe's due amount
-Assert.assertEquals(doe.get("Due"), "$100.00");
-// fails with: expected [$100.00] but found [$90.00] if the cell says $90.00
+import org.testng.annotations.Test;
+ 
+public class AccountsTableTest extends BaseTest {
+ 
+    @Test
+    public void doeOwesOneHundred() {
+        open("/accounts");
+ 
+        // One map per row, keyed by column header:
+        // [{Last Name=Smith, First Name=John, Due=$50.00},
+        //  {Last Name=Doe,   First Name=Jason, Due=$100.00}]
+        List<Map<String, String>> rows = $("#table1").rows();
+ 
+        // Find a row by a column's value
+        Map<String, String> doe = rows.stream()
+                .filter(row -> row.get("Last Name").equals("Doe"))
+                .findFirst()
+                .orElseThrow();
+ 
+        // Assert on a cell by its column header
+        Assert.assertEquals(doe.get("Due"), "$100.00");
+        // fails with: expected [$100.00] but found [$90.00] if the cell says $90.00
+    }
+}
 ```
+
+`rows()` returns a plain `List`, so finding a row is ordinary Java: a stream as above,
+or a `for` loop if you prefer.
 
 For each example below, reuse `#table1` and its `<thead>`, replacing only the `<tbody>`.
 
@@ -105,3 +116,5 @@ Assert.assertEquals(rows.get(1).get("Last Name"), "Doe");
 Note that header selection matters: without a `<thead>` header, the first row
 containing `<th>` supplies the keys. Keep the column headers in `<thead>` so a
 preceding group heading is not selected as the header.
+
+**Deeper reference:** [Accessibility-First Locators](/docs/guides/semantic-locators) — the `$()` / `Locator` API that `rows()` belongs to.
