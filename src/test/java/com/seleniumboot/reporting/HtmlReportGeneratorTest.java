@@ -101,4 +101,55 @@ public class HtmlReportGeneratorTest {
         assertTrue(html.contains("<div class=\"stat-value\">01:01:01</div>"), "stat tile shows suite time");
         assertFalse(html.contains("Avg Time (ms)"), "per-test average tile is gone");
     }
+
+    @Test
+    public void trendData_isChronological_andLimitedToLastRuns() throws Exception {
+        java.nio.file.Path dir = java.nio.file.Files.createTempDirectory("sb-history");
+        System.setProperty("seleniumboot.history.dir", dir.toString());
+        try {
+            for (int i = 1; i <= 3; i++) {
+                java.nio.file.Files.writeString(dir.resolve("selenium-boot-metrics-2026101" + i + "-10300" + i + ".json"),
+                        "{\"passRate\":" + (i * 30) + ".0,\"failedTests\":" + i + ",\"flakyTests\":" + i + ",\"suiteDurationMs\":" + (i * 2000) + "}");
+            }
+            java.nio.file.Files.writeString(dir.resolve("selenium-boot-metrics-20261019-103000.json"), "not json");
+
+            JsonNode trend = new ObjectMapper().readTree(HtmlReportGenerator.buildTrendData(2));
+            assertEquals(trend.size(), 1, "last 2 files taken, the unreadable one skipped");
+            assertEquals(trend.get(0).get("passRate").asDouble(), 90.0);
+            assertEquals(trend.get(0).get("durationSec").asDouble(), 6.0);
+            assertEquals(trend.get(0).get("flakyTests").asInt(), 3, "flakyTests carried into trend entry");
+            assertEquals(trend.get(0).get("label").asText(), "10-13 10:30");
+
+            JsonNode all = new ObjectMapper().readTree(HtmlReportGenerator.buildTrendData(20));
+            assertEquals(all.size(), 3);
+            assertEquals(all.get(0).get("passRate").asDouble(), 30.0, "oldest first");
+            assertEquals(all.get(0).get("flakyTests").asInt(), 1, "flakyTests on oldest run");
+            assertEquals(all.get(2).get("flakyTests").asInt(), 3, "flakyTests on newest run");
+        } finally {
+            System.clearProperty("seleniumboot.history.dir");
+        }
+    }
+
+    @Test
+    public void trendData_emptyWithoutHistory() throws Exception {
+        System.setProperty("seleniumboot.history.dir",
+                java.nio.file.Files.createTempDirectory("sb-empty").toString());
+        try {
+            assertEquals(HtmlReportGenerator.buildTrendData(20), "[]");
+            assertTrue(html(1, 0).contains("const trendData = [];"));
+        } finally {
+            System.clearProperty("seleniumboot.history.dir");
+        }
+    }
+
+    @Test
+    public void aiRunSummary_rendersEscaped_andIsAbsentWithout() throws Exception {
+        assertFalse(html(1, 0).contains("AI Run Summary"));
+        JsonNode root = new ObjectMapper().readTree(
+                "{\"totalTests\":1,\"failedTests\":1,\"passRate\":0.0,\"tests\":[],"
+                + "\"aiRunSummary\":\"Most failures share <b>one</b> cause.\"}");
+        String html = HtmlReportGenerator.buildHtml(root);
+        assertTrue(html.contains("AI Run Summary"));
+        assertTrue(html.contains("Most failures share &lt;b&gt;one&lt;/b&gt; cause."), "summary text is HTML-escaped");
+    }
 }

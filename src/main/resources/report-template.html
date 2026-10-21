@@ -237,7 +237,6 @@
         .ai-analysis-section { margin-bottom: 14px; background: rgba(88,166,255,.06); border: 1px solid rgba(88,166,255,.2); border-radius: 6px; overflow: hidden; }
         .ai-analysis-header { padding: 8px 14px; font-size: 11px; font-weight: 700; color: #58a6ff; text-transform: uppercase; letter-spacing: .5px; border-bottom: 1px solid rgba(88,166,255,.15); }
         .ai-analysis-body  { padding: 12px 14px; font-size: 13px; color: var(--text-primary); white-space: pre-wrap; line-height: 1.6; }
-        .flakiness-section { }
         .flakiness-item { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--border); }
         .flakiness-item:last-child { border-bottom: none; }
         .flakiness-name { flex: 1; font-size: 13px; color: var(--text-primary); word-break: break-all; }
@@ -261,6 +260,14 @@
         .failure-group-tests { margin: 0; padding-left: 20px; font-size: 12px; color: var(--text-secondary); }
         .failure-why { font-size: 12px; color: var(--muted, #6b7280); margin-bottom: 8px; }
         .failure-badge { display: inline-block; padding: 1px 8px; margin-right: 6px; border-radius: 10px; font-size: 11px; font-weight: 700; letter-spacing: .03em; color: var(--bad); border: 1px solid var(--bad); }
+        .failure-type-badge { display: inline-block; padding: 1px 8px; margin-right: 6px; border-radius: 10px; font-size: 11px; font-weight: 700; letter-spacing: .03em; }
+        .failure-type-product-bug { background: rgba(248,81,73,.15); color: #f85149; border: 1px solid rgba(248,81,73,.4); }
+        .failure-type-test-bug { background: rgba(210,153,34,.15); color: #d29922; border: 1px solid rgba(210,153,34,.4); }
+        .failure-type-environment { background: rgba(163,113,247,.15); color: #a371f7; border: 1px solid rgba(163,113,247,.4); }
+        .failure-type-flaky { background: rgba(234,179,8,.15); color: #eab308; border: 1px solid rgba(234,179,8,.4); }
+        .failure-type-unknown { background: rgba(139,148,158,.15); color: #8b949e; border: 1px solid rgba(139,148,158,.4); }
+        .failure-action { margin-top: 6px; margin-bottom: 10px; padding: 8px 12px; background: rgba(88,166,255,.08); border-left: 3px solid #58a6ff; border-radius: 4px; font-size: 12px; color: var(--text-primary, inherit); line-height: 1.5; }
+        .failure-action strong { color: #58a6ff; font-weight: 600; }
         .stack-trace {
             font-family: 'Roboto Mono', monospace; font-size: 12px; color: var(--code-text);
             background: var(--code-bg); padding: 14px; border-radius: 6px;
@@ -413,6 +420,8 @@
 
             {{FAILURES_SHORTCUT}}
 
+            {{AI_RUN_SUMMARY}}
+
             <!-- Charts -->
             <div class="charts-row">
                 <div class="card chart-card">
@@ -424,6 +433,22 @@
                 <div class="card chart-card">
                     <div class="card-header">Execution Time Percentiles (ms)</div>
                     <div class="card-body"><canvas id="executionChart"></canvas></div>
+                </div>
+            </div>
+
+            <!-- Trend over runs (hidden until there are 2+ runs of history) -->
+            <div class="charts-row" id="trendRow" style="display:none">
+                <div class="card chart-card">
+                    <div class="card-header">Pass Rate Trend (%)</div>
+                    <div class="card-body"><canvas id="trendRateChart"></canvas></div>
+                </div>
+                <div class="card chart-card">
+                    <div class="card-header">Suite Duration Trend (s)</div>
+                    <div class="card-body"><canvas id="trendTimeChart"></canvas></div>
+                </div>
+                <div class="card chart-card">
+                    <div class="card-header">Flaky Test Trend</div>
+                    <div class="card-body"><canvas id="trendFlakyChart"></canvas></div>
                 </div>
             </div>
 
@@ -517,19 +542,7 @@ function showTab(tabId, el) {
     document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
     document.getElementById('tab-' + tabId).classList.add('active');
     if (el) el.classList.add('active');
-    try { localStorage.setItem('sb-tab', tabId); } catch(e) {}
 }
-// Restore last active tab on load
-(function() {
-    try {
-        const last = localStorage.getItem('sb-tab');
-        if (last && document.getElementById('tab-' + last)) {
-            const el = document.querySelector('.nav-item[onclick*="\'' + last + '\'"]');
-            showTab(last, el);
-        }
-    } catch(e) {}
-})();
-
 // ── Lightbox ──
 function openLightbox(src) {
     document.getElementById('lightbox-img').src = src;
@@ -583,6 +596,24 @@ if (window.Chart) {
             plugins: { legend: { labels: { font: { family: 'Roboto', size: 13 } } } },
             scales: { x: { grid: { display: false } }, y: { beginAtZero: true } } }
     });
+}
+
+// ── Trend over runs ──
+const trendData = {{TREND_DATA}};
+if (window.Chart && trendData.length >= 2) {
+    document.getElementById('trendRow').style.display = '';
+    const labels = trendData.map(r => r.label);
+    const line = (el, label, data, color, max) => new Chart(document.getElementById(el), {
+        type: 'line',
+        data: { labels, datasets: [{ label, data, borderColor: color, backgroundColor: color + '33',
+            fill: true, tension: .3, pointRadius: 3 }] },
+        options: { responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: { x: { grid: { display: false } }, y: { beginAtZero: true, max } } }
+    });
+    line('trendRateChart', 'Pass rate (%)', trendData.map(r => r.passRate), '#43a047', 100);
+    line('trendTimeChart', 'Duration (s)', trendData.map(r => r.durationSec), '#303f9f');
+    line('trendFlakyChart', 'Flaky tests', trendData.map(r => r.flakyTests), '#f57c00');
 }
 
 // ── Collapse / expand class groups ──

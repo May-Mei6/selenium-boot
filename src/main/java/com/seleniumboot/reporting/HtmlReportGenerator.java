@@ -163,6 +163,38 @@ public final class HtmlReportGenerator {
         return String.format("%02d:%02d:%02d", totalSeconds / 3600, (totalSeconds % 3600) / 60, totalSeconds % 60);
     }
 
+    /**
+     * Pass-rate and duration of the last {@code maxRuns} runs from the metrics history, oldest
+     * first, as a JSON array for the trend charts. Empty array when there is no history.
+     */
+    static String buildTrendData(int maxRuns) {
+        File dir = ReportPaths.metricsHistoryDir();
+        File[] files = dir.isDirectory() ? dir.listFiles((d, n) -> n.endsWith(".json")) : null;
+        if (files == null || files.length == 0) return "[]";
+        java.util.Arrays.sort(files, java.util.Comparator.comparing(File::getName));
+        int from = Math.max(0, files.length - maxRuns);
+        ObjectMapper mapper = new ObjectMapper();
+        com.fasterxml.jackson.databind.node.ArrayNode out = mapper.createArrayNode();
+        for (int i = from; i < files.length; i++) {
+            try {
+                JsonNode n = mapper.readTree(files[i]);
+                com.fasterxml.jackson.databind.node.ObjectNode run = out.addObject();
+                String name = files[i].getName().replaceAll("^.*metrics-|\\.json$", "");
+                run.put("label", name.length() >= 13
+                        ? name.substring(4, 6) + "-" + name.substring(6, 8) + " " + name.substring(9, 11) + ":" + name.substring(11, 13)
+                        : name);
+                run.put("passRate", n.path("passRate").asDouble(0));
+                run.put("failed", n.path("failedTests").asInt(0));
+                run.put("flakyTests", n.path("flakyTests").asInt(0));
+                long ms = n.path("suiteDurationMs").asLong(0);
+                run.put("durationSec", Math.round((ms > 0 ? ms : n.path("totalTimeMs").asLong(0)) / 100.0) / 10.0);
+            } catch (Exception ignored) {
+                // unreadable history file: skip it
+            }
+        }
+        return out.toString();
+    }
+
     static String buildHtml(JsonNode root) {
 
         String executionPercentiles =
@@ -230,6 +262,10 @@ public final class HtmlReportGenerator {
             }
         }
 
+        String aiRunSummary     = root.hasNonNull("aiRunSummary")
+                ? "<div class=\"card section-mb\"><div class=\"card-header\">&#x1F916; AI Run Summary</div>"
+                  + "<div class=\"card-body ai-analysis-body\">" + escapeHtml(root.get("aiRunSummary").asText()) + "</div></div>"
+                : "";
         String retrySection     = buildRetrySection(flakyTests, recoveredTests);
         String slowestSection   = tests != null ? buildSlowestTests(tests) : "";
         String flakinessSection = buildFlakinessSection() + buildTestStatusSection(tests);
@@ -260,10 +296,12 @@ public final class HtmlReportGenerator {
                 .replace("{{PASS_RATE_CLASS}}", passRateClass)
                 .replace("{{FLAKY_TESTS}}", String.valueOf(flakyTests))
                 .replace("{{RECOVERED_TESTS}}", String.valueOf(recoveredTests))
+                .replace("{{AI_RUN_SUMMARY}}", aiRunSummary)
                 .replace("{{RETRY_SECTION}}", retrySection)
                 .replace("{{SLOWEST_TESTS}}", slowestSection)
                 .replace("{{FLAKINESS_SECTION}}", flakinessSection)
                 .replace("{{DONUT_DATA}}", donutData)
+                .replace("{{TREND_DATA}}", buildTrendData(20))
                 .replace("{{ROWS}}", rows.toString())
                 .replace("{{FAILURE_ROWS}}", failureRows)
                 .replace("{{FAILURE_GROUPS}}", failureGroups)
@@ -304,6 +342,15 @@ public final class HtmlReportGenerator {
     }
 
     private static String buildRow(JsonNode test, int rowIndex, String groupId, boolean collapsed, boolean showBrowser) {
+        return buildRow(test, rowIndex, groupId, collapsed, collapsed, showBrowser);
+    }
+
+    /**
+     * @param collapsed    hide the test row itself (its class group is collapsed)
+     * @param detailHidden hide the expandable detail row under it
+     */
+    private static String buildRow(JsonNode test, int rowIndex, String groupId, boolean collapsed,
+                                   boolean detailHidden, boolean showBrowser) {
         String status      = test.has("status")      ? test.get("status").asText()      : "UNKNOWN";
         String statusClass = "status-" + status.toLowerCase();
         String rawTestId   = test.has("testId")      ? test.get("testId").asText()      : "";
@@ -357,7 +404,7 @@ public final class HtmlReportGenerator {
                     ? "<div class=\"step-timeline-section\"><div class=\"step-timeline-header\">Steps (" + test.get("steps").size() + ")</div>"
                       + "<div class=\"step-timeline\">" + stepsHtml + "</div></div>"
                     : "";
-            String detailDisplay = collapsed ? " style=\"display:none\"" : "";
+            String detailDisplay = detailHidden ? " style=\"display:none\"" : "";
             detailRow = "<tr class=\"detail-row group-member\" data-group=\"" + groupKey + "\" id=\"detail-" + rowIndex + "\"" + detailDisplay + ">"
                     + "<td colspan=\"" + colspan + "\"><div class=\"detail-panel\">"
                     + failureDetail + perfHtml + sessionLink + traceLink + stepsSection + recordingHtml + aiHtml + errorHtml + traceHtml
@@ -368,7 +415,7 @@ public final class HtmlReportGenerator {
         String rowClass    = "group-member" + (hasDetail ? " expandable" : "");
         String clickAttr   = hasDetail ? " onclick=\"toggleDetail(" + rowIndex + ")\"" : "";
         String memberStyle = collapsed ? " style=\"display:none\"" : "";
-        String iconOpen    = (!collapsed && hasDetail) ? " open" : "";
+        String iconOpen    = (!detailHidden && hasDetail) ? " open" : "";
 
         String browserCell = showBrowser ? "<td class=\"browser-cell\">" + escapeHtml(browser) + "</td>" : "";
 
@@ -399,14 +446,41 @@ public final class HtmlReportGenerator {
             label = cat;
         }
         String evidence = test.has("failureEvidence") ? test.get("failureEvidence").asText() : "";
-        return "<div class=\"failure-why\"><span class=\"failure-badge\">" + escapeHtml(label) + "</span>"
-                + escapeHtml(evidence) + "</div>";
+        String typeBadge = "";
+        if (test.has("failureType")) {
+            String type = test.get("failureType").asText();
+            String typeLabel;
+            try {
+                com.seleniumboot.failure.FailureType ft = com.seleniumboot.failure.FailureType.valueOf(type);
+                if (ft == com.seleniumboot.failure.FailureType.FLAKY && !label.equalsIgnoreCase("Unknown")) {
+                    typeLabel = "Flaky (" + label + ")";
+                } else {
+                    typeLabel = ft.label();
+                }
+            } catch (IllegalArgumentException e) {
+                typeLabel = type;
+            }
+            String typeClass = "failure-type-" + type.toLowerCase(java.util.Locale.ROOT).replace('_', '-');
+            typeBadge = "<span class=\"failure-type-badge " + typeClass + "\">" + escapeHtml(typeLabel) + "</span>";
+        }
+        String actionHtml = "";
+        if (test.has("suggestedAction") && !test.get("suggestedAction").asText().isBlank()) {
+            actionHtml = "<div class=\"failure-action\"><strong>Action:</strong> "
+                    + escapeHtml(test.get("suggestedAction").asText()) + "</div>";
+        }
+        String categoryBadge = typeBadge.contains("(" + escapeHtml(label) + ")")
+                ? ""
+                : "<span class=\"failure-badge\">" + escapeHtml(label) + "</span>";
+        return "<div class=\"failure-why\">" + typeBadge + categoryBadge
+                + escapeHtml(evidence) + "</div>" + actionHtml;
     }
 
     private static String buildFailureDetailPanel(JsonNode detail) {
         if (detail == null || detail.isEmpty()) return "";
         StringBuilder sb = new StringBuilder("<div class=\"failure-detail-section\">"
                 + "<div class=\"step-timeline-header\">Failure detail</div><ul>");
+        detailItem(sb, "Failure type", detail, "failureType");
+        detailItem(sb, "Suggested action", detail, "suggestedAction");
         detailItem(sb, "Failing locator", detail, "failingLocator");
         detailItem(sb, "Application frame", detail, "applicationFrame");
         detailItem(sb, "Last successful step", detail, "lastSuccessfulStep");
@@ -551,7 +625,9 @@ public final class HtmlReportGenerator {
                     + "<span class=\"group-count\"> &mdash; " + total + " failure" + (total != 1 ? "s" : "") + "</span>"
                     + "</td></tr>");
             for (JsonNode test : entry.getValue()) {
-                rows.append(buildRow(test, rowIndex++, entry.getKey(), false, showBrowser));
+                // The "failures:" prefix keeps these rows out of the Test Cases tab's group toggle,
+                // which selects by data-group. Details start collapsed; the row stays visible.
+                rows.append(buildRow(test, rowIndex++, "failures:" + entry.getKey(), false, true, showBrowser));
             }
         }
         return rows.toString();

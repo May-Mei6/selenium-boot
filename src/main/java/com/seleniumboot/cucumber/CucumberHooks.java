@@ -216,10 +216,10 @@ public class CucumberHooks {
         CucumberRetryContext.clear();
     }
 
-    private static void checkCucumberQuarantine(Scenario scenario) {
+    static void checkCucumberQuarantine(Scenario scenario) {
         try {
             com.seleniumboot.config.SeleniumBootConfig.Quarantine cfg =
-                    SeleniumBootContext.getConfig().getQuarantine();
+                    SeleniumBootContext.isInitialized() ? SeleniumBootContext.getConfig().getQuarantine() : null;
             if (cfg != null && !cfg.isEnabled()) return;
 
             // ── 1. In-file tag check (user adds @quarantine to the scenario) ──
@@ -228,7 +228,7 @@ public class CucumberHooks {
             for (String t : scenario.getSourceTagNames()) {
                 String normalized = t.startsWith("@") ? t.substring(1) : t;
                 if (normalized.equalsIgnoreCase(configuredTag)) {
-                    throw new org.testng.SkipException(
+                    abortQuarantinedScenario(
                         "[Quarantined] " + scenario.getName() + " — @" + configuredTag + " tag present"
                     );
                 }
@@ -240,14 +240,31 @@ public class CucumberHooks {
             java.util.Collection<String> tags = scenario.getSourceTagNames();
 
             if (QuarantineLoader.isQuarantinedScenario(tags, featureUri, scenarioName)) {
-                throw new org.testng.SkipException(
+                abortQuarantinedScenario(
                     "[Quarantined] " + scenarioName + " — "
                     + QuarantineLoader.getScenarioReason(tags, featureUri, scenarioName)
                 );
             }
-        } catch (org.testng.SkipException e) {
+        } catch (org.testng.SkipException | org.opentest4j.TestAbortedException e) {
             throw e;
         } catch (Exception ignored) {}
+    }
+
+    private static void abortQuarantinedScenario(String reason) {
+        if (isTestNgExecution()) {
+            throw new org.testng.SkipException(reason);
+        } else {
+            throw new org.opentest4j.TestAbortedException(reason);
+        }
+    }
+
+    /** Heuristic: a TestNG result is current only on a TestNG thread. Cucumber launched from inside a TestNG test is treated as TestNG. */
+    private static boolean isTestNgExecution() {
+        try {
+            return org.testng.Reporter.getCurrentTestResult() != null;
+        } catch (Throwable ignored) {
+            return false;
+        }
     }
 
     private void safeQuitDriver() {

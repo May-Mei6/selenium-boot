@@ -11,11 +11,25 @@ All notable changes to Selenium Boot are documented here.
 
 ## [Unreleased]
 
+- **Failure Intelligence: high-level triage and suggested actions** — each failure is classified as `Product bug`, `Test bug`, `Environment`, `Flaky` or `Unknown` (flaky keeps its cause, e.g. `Flaky (Locator not found)`), with a rule-based suggested action. Shown in the HTML report, as `failureType` / `suggestedAction` in the metrics JSON, and in the JUnit XML; opt-in AI analysis uses it as a baseline. No API key needed. (#138)
+
+- **HTML report: tab and failure fixes** — the report always opens on the Dashboard (it no longer restores the last-open tab), failure details start collapsed, and the Failures tab no longer goes empty after you expand or collapse a class in Test Cases (both tabs shared one group id).
+
+- **AI provider is configurable** — `ai.provider` selects the backend for failure analysis and the run summary: `anthropic` (default, unchanged), `gemini`, or `openai` (any OpenAI-compatible `/chat/completions` endpoint — OpenAI, Azure, Groq, local Ollama via `ai.baseUrl`). `ai.model` now defaults per provider. Existing configs keep working with no change.
+
+- **AI run summary (opt-in)** — `ai.runSummary: true` adds one short paragraph to the HTML dashboard summarising the run's failures: which same-cause groups account for most of them, which look like product bugs versus test or environment problems, and what to check first. One API call per run, independent of `ai.failureAnalysis`; only grouped error messages and test names are sent (see the data note in the HTML report docs). Absent when disabled, when nothing failed, or on any error; the suite result is never affected. The text is exported as `aiRunSummary` in the metrics JSON.
+
+- **HTML report: pass-rate and duration trend charts** — the dashboard now shows two line charts under the donut and percentile row, built from the last 20 runs in the metrics history (the same `flakiness.historyDir` / `-Dseleniumboot.history.dir` location the Flakiness Radar reads). They appear once there are at least two runs of history and stay hidden otherwise. (#160)
+
+- **Cucumber on the JUnit Platform: quarantine and suite-lifecycle parity** — quarantined scenarios run under `cucumber-junit-platform-engine` are now reported as aborted instead of failed (`TestAbortedException`; TestNG still gets `SkipException`). `SeleniumBootLauncherListener` now also clears the API health cache, loads pre-conditions and starts test-management reporting at test-plan start, matching the TestNG path, and the suite-start work is idempotent. `docs-site/docs/cucumber.md` documents the JUnit Platform runner as the recommended option. (#155, #158)
+
 - **JUnit Platform: suite-start hooks now fire** — `ExecutionHook.onSuiteStart()` was never called on the JUnit 5 path (only TestNG), so hooks that open a run or start a clock silently did nothing. `SeleniumBootLauncherListener` now bootstraps the framework and fires `onSuiteStart()` once per test plan.
 
 - **Failed tests with trace links in GitHub Actions job summary** — when running inside GitHub Actions and `tracing.enabled: true` is on, failed tests are automatically summarized in a Markdown table (test name, error message, and path to the HTML trace file) appended to `$GITHUB_STEP_SUMMARY`. Triage failures and locate trace paths directly from the Actions job summary without downloading artifact bundles; no-op outside Actions or when all tests pass. (#137)
 
 - **Bounded failure detail record** — every failed test now exports one optional-field `failureDetail` object with the failing locator, top application frame, last successful step, page URL/title, heal events, console errors, retry/history status, and representative same-cause context. The HTML failure panel and opt-in AI prompt reuse this record; raw errors and stack traces remain available. Text/list/URL limits and the exact AI data disclosure are documented. (#142)
+
+- **Richer auto-retrying locator assertions** — `LocatorAssert` adds `isFocused()` and `isEmpty()`, plus `Pattern` overloads for `hasText`, `containsText`, and `hasValue`. Regex failures report the locator and last observed value, and stale elements are re-resolved until `timeouts.explicit`. (#136)
 
 - **`Locator`: `waitFor(State)`, `allTextContents()`, and element `screenshot()`** — `waitFor(State)` (and `waitFor()`) waits for an element to reach a target lifecycle state (`VISIBLE`, `HIDDEN`, `ATTACHED`, `DETACHED`), retrying up to `timeouts.explicit`. `allTextContents()` returns the text content of all matched elements in a single pass without waiting if empty, re-resolving if an element goes stale during read. `screenshot()` returns the element's PNG bytes, and `screenshot(Path)` writes them to a file path; both terminal actions re-resolve on every poll to survive stale elements. (#135)
 
